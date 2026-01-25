@@ -1,0 +1,40 @@
+# Render Blueprint
+# Deploy with: https://render.com/docs/blueprint-spec
+#
+# This deploys News Bench as a web service with:
+# - Automatic 12-hour news pipeline updates
+# - Persistent SQLite storage via Render Disk
+# - Gunicorn for production performance
+
+services:
+  - type: web
+    name: news-bench
+    runtime: python
+    plan: free  # or "starter" for more resources
+
+    # Build settings
+    buildCommand: pip install -r requirements.txt
+
+    # Start command (gunicorn for production)
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
+
+    # Environment variables
+    envVars:
+      - key: ENABLE_SCHEDULER
+        value: "true"
+      - key: GROQ_API_KEY
+        sync: false  # Set manually in dashboard for security
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+    # Health check
+    healthCheckPath: /api/health
+
+    # Persistent storage for SQLite database
+    disk:
+      name: news-bench-data
+      mountPath: /data
+      sizeGB: 1
+
+    # Auto-deploy on push
+    autoDeploy: true

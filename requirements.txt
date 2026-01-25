@@ -1,0 +1,26 @@
+# News Bench - Python Dependencies
+# =================================
+# Install with: pip install -r requirements.txt
+
+# Web Framework
+flask>=3.0.0
+gunicorn>=21.0.0
+
+# RSS Parsing
+feedparser>=6.0.0
+requests>=2.31.0
+
+# Machine Learning / Embeddings
+sentence-transformers>=2.2.0
+numpy>=1.24.0
+
+# Scheduling (for automatic updates)
+apscheduler>=3.10.0
+
+# Optional: For better encoding detection
+chardet>=5.2.0
+
+# Note: For LLM synthesis, you need one of:
+# - Ollama installed locally (free, recommended): https://ollama.ai
+# - Groq API key (fast cloud inference): https://console.groq.com
+# - Together.ai API key: https://api.together.xyz

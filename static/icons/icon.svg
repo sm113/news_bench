@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#0c0e12"/>
+  <rect x="64" y="64" width="384" height="384" fill="none" stroke="#1c212b" stroke-width="2"/>
+  <text x="256" y="280" text-anchor="middle" font-family="SF Mono, Monaco, monospace" font-size="120" font-weight="300" fill="#ffffff">N/B</text>
+  <rect x="64" y="400" width="100" height="4" fill="#00ff88"/>
+  <rect x="180" y="400" width="60" height="4" fill="#4a9eff"/>
+  <rect x="256" y="400" width="60" height="4" fill="#888888"/>
+  <rect x="332" y="400" width="60" height="4" fill="#ff6b6b"/>
+</svg>

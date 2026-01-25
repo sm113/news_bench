@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no, maximum-scale=1">
+
+    <!-- PWA & Theme -->
+    <meta name="theme-color" content="#0c0e12">
+    <meta name="color-scheme" content="dark">
+
+    <!-- iOS Specific -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="News/Bench">
+    <meta name="format-detection" content="telephone=no">
+
+    <!-- Icons -->
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-180.png') }}">
+    <link rel="apple-touch-icon" sizes="152x152" href="{{ url_for('static', filename='icons/icon-152.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='icons/icon-180.png') }}">
+    <link rel="apple-touch-icon" sizes="167x167" href="{{ url_for('static', filename='icons/icon-167.png') }}">
+
+    <!-- Splash Screens (generated via media queries) -->
+    <link rel="apple-touch-startup-image" href="{{ url_for('static', filename='splash/splash.png') }}">
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+
+    <title>NEWS/BENCH</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="bench-background"></div>
+    <div class="scroll-progress" id="scrollProgress"></div>
+
+    <header class="header">
+        <a href="/" class="logo">
+            <span class="logo-text">News/Bench</span>
+        </a>
+        <div class="header-meta">
+            <span id="storyCount">{{ stats.total_stories }} STORIES</span>
+            <span>/</span>
+            <span>{{ stats.unique_sources }} SOURCES</span>
+        </div>
+        <div class="header-actions">
+            <button class="icon-btn" onclick="refreshFeed()" id="refreshBtn">SYNC</button>
+        </div>
+    </header>
+
+    <main class="bench">
+        {% if stories %}
+        <div class="newspaper-grid" id="storyFeed">
+            {% for story in stories %}
+            <article class="newspaper {% if loop.index <= 2 %}breaking{% endif %}" onclick="openStory({{ story.id }})" data-relevance="{{ story.relevance_score|default(0) }}" data-story-id="{{ story.id }}">
+                <div class="newspaper-meta">
+                    <span class="relevance-score" title="Relevance score">{{ story.relevance_score|default(0)|int }}</span>
+                    <div class="newspaper-sources">
+                        {% for source in story.sources[:8] %}
+                        <span class="source-dot {{ source.source_lean }}" title="{{ source.source_name }}"></span>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="newspaper-date">{{ story.time_ago }} / {{ story.source_count }} sources</div>
+                <h2 class="newspaper-headline">{{ story.synthesized_headline }}</h2>
+            </article>
+            {% endfor %}
+        </div>
+
+        <div class="load-more" id="loadMore">
+            <div class="loading-spinner"></div>
+            <span>Loading more stories...</span>
+        </div>
+
+        <div class="end-of-feed" id="endOfFeed" style="display: none;">
+            <span>You're all caught up</span>
+        </div>
+
+        {% else %}
+        <div class="empty-state">
+            <h2>No data available</h2>
+            <p>Initialize the news pipeline to begin analysis</p>
+            <code>python run.py</code>
+        </div>
+        {% endif %}
+    </main>
+
+    <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+        <div class="expanded-paper" id="expandedPaper">
+            <button class="close-btn" onclick="closeModal()">Close</button>
+            <div class="expanded-content" id="expandedContent"></div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <p>NEWS/BENCH — Multi-source aggregation and synthesis system</p>
+        <p class="footer-disclaimer">AI-generated analysis / Consult primary sources for verification</p>
+    </footer>
+
+    <script>
+        let currentStory = null;
+        let scrollPosition = 0;
+        let currentPage = 1;
+        let isLoading = false;
+        let hasMoreStories = true;
+        let loadedStoryIds = new Set();
+
+        // Detect iOS
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+        // Initialize loaded story IDs from initial render
+        document.querySelectorAll('[data-story-id]').forEach(el => {
+            loadedStoryIds.add(el.dataset.storyId);
+        });
+
+        // Haptic feedback (works with Capacitor)
+        function haptic(style = 'light') {
+            if (window.Capacitor?.Plugins?.Haptics) {
+                window.Capacitor.Plugins.Haptics.impact({ style });
+            } else if (navigator.vibrate) {
+                navigator.vibrate(style === 'heavy' ? 20 : 10);
+            }
+        }
+
+        // ===========================================
+        // SCROLL PROGRESS INDICATOR
+        // ===========================================
+        function updateScrollProgress() {
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+            document.getElementById('scrollProgress').style.width = `${progress}%`;
+        }
+
+        // Throttled scroll handler
+        let scrollTicking = false;
+        window.addEventListener('scroll', () => {
+            if (!scrollTicking) {
+                requestAnimationFrame(() => {
+                    updateScrollProgress();
+                    checkInfiniteScroll();
+                    scrollTicking = false;
+                });
+                scrollTicking = true;
+            }
+        }, { passive: true });
+
+        // ===========================================
+        // INFINITE SCROLL
+        // ===========================================
+        async function loadMoreStories() {
+            if (isLoading || !hasMoreStories) return;
+
+            isLoading = true;
+            document.getElementById('loadMore').classList.add('active');
+
+            try {
+                currentPage++;
+                const response = await fetch(`/api/stories?page=${currentPage}&limit=10`);
+                const data = await response.json();
+
+                if (data.stories.length === 0) {
+                    hasMoreStories = false;
+                    document.getElementById('loadMore').style.display = 'none';
+                    document.getElementById('endOfFeed').style.display = 'flex';
+                } else {
+                    appendStories(data.stories);
+                    // Check if we've loaded all stories
+                    if (loadedStoryIds.size >= data.total) {
+                        hasMoreStories = false;
+                        document.getElementById('loadMore').style.display = 'none';
+                        document.getElementById('endOfFeed').style.display = 'flex';
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to load more stories:', e);
+                currentPage--;
+            }
+
+            isLoading = false;
+            document.getElementById('loadMore').classList.remove('active');
+        }
+
+        function appendStories(stories) {
+            const feed = document.getElementById('storyFeed');
+
+            stories.forEach((story, index) => {
+                // Skip if already loaded
+                if (loadedStoryIds.has(String(story.id))) return;
+                loadedStoryIds.add(String(story.id));
+
+                const article = document.createElement('article');
+                article.className = 'newspaper';
+                article.setAttribute('data-story-id', story.id);
+                article.setAttribute('data-relevance', story.relevance_score || 0);
+                article.onclick = () => openStory(story.id);
+
+                // Build source dots
+                const sourceDots = (story.sources || []).slice(0, 8).map(s =>
+                    `<span class="source-dot ${s.source_lean}" title="${s.source_name}"></span>`
+                ).join('');
+
+                article.innerHTML = `
+                    <div class="newspaper-meta">
+                        <span class="relevance-score" title="Relevance score">${Math.round(story.relevance_score || 0)}</span>
+                        <div class="newspaper-sources">${sourceDots}</div>
+                    </div>
+                    <div class="newspaper-date">${story.time_ago} / ${story.source_count} sources</div>
+                    <h2 class="newspaper-headline">${story.synthesized_headline}</h2>
+                `;
+
+                feed.appendChild(article);
+
+                // Observe for reveal animation
+                revealObserver.observe(article);
+            });
+        }
+
+        function checkInfiniteScroll() {
+            const loadMore = document.getElementById('loadMore');
+            if (!loadMore || !hasMoreStories) return;
+
+            const rect = loadMore.getBoundingClientRect();
+            const threshold = window.innerHeight * 1.5;
+
+            if (rect.top < threshold) {
+                loadMoreStories();
+            }
+        }
+
+        // ===========================================
+        // REVEAL ANIMATIONS (Intersection Observer)
+        // ===========================================
+        const revealObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('revealed');
+                    // Optional: unobserve after reveal for performance
+                    // revealObserver.unobserve(entry.target);
+                }
+            });
+        }, {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        });
+
+        // Observe all initial stories
+        document.querySelectorAll('.newspaper').forEach(el => {
+            revealObserver.observe(el);
+        });
+
+        // ===========================================
+        // MODAL HANDLING
+        // ===========================================
+        async function openStory(storyId) {
+            haptic('light');
+            try {
+                const response = await fetch(`/api/story/${storyId}`);
+                const story = await response.json();
+                currentStory = story;
+                renderExpandedStory(story);
+
+                // iOS scroll position fix
+                scrollPosition = window.scrollY;
+                document.body.classList.add('modal-open');
+                document.body.style.top = `-${scrollPosition}px`;
+
+                document.getElementById('modalOverlay').classList.add('active');
+            } catch (e) {
+                console.error('Failed to load story:', e);
+            }
+        }
+
+        function closeModal(event) {
+            if (!event || event.target === document.getElementById('modalOverlay') || event.target.classList.contains('close-btn')) {
+                haptic('light');
+                document.getElementById('modalOverlay').classList.remove('active');
+
+                // Restore scroll position
+                document.body.classList.remove('modal-open');
+                document.body.style.top = '';
+                window.scrollTo(0, scrollPosition);
+
+                currentStory = null;
+            }
+        }
+
+        function renderExpandedStory(story) {
+            const sources = story.sources || [];
+            const timestamp = new Date().toISOString().split('T')[0];
+
+            document.getElementById('expandedContent').innerHTML = `
+                <div class="expanded-masthead">News/Bench</div>
+                <div class="expanded-date">${timestamp} / ${sources.length} sources analyzed</div>
+
+                <h1 class="expanded-headline">${story.synthesized_headline}</h1>
+
+                <div class="story-body">${story.consensus || 'No summary available.'}</div>
+
+                ${(story.left_framing || story.center_framing || story.right_framing) ? `
+                <div class="section-divider">
+                    <span class="section-title">How They Frame It</span>
+                </div>
+                <div class="framing-grid">
+                    <div class="framing-column left">
+                        <div class="framing-label">
+                            <span class="framing-dot"></span>
+                            Left
+                        </div>
+                        <p class="framing-text">${story.left_framing || 'No left-leaning coverage.'}</p>
+                    </div>
+                    <div class="framing-column center">
+                        <div class="framing-label">
+                            <span class="framing-dot"></span>
+                            Center
+                        </div>
+                        <p class="framing-text">${story.center_framing || 'No center coverage.'}</p>
+                    </div>
+                    <div class="framing-column right">
+                        <div class="framing-label">
+                            <span class="framing-dot"></span>
+                            Right
+                        </div>
+                        <p class="framing-text">${story.right_framing || 'No right-leaning coverage.'}</p>
+                    </div>
+                </div>
+                ` : ''}
+
+                ${story.key_differences ? `
+                <div class="section-divider">
+                    <span class="section-title">Blind Spots</span>
+                </div>
+                <p class="differences-content">${story.key_differences}</p>
+                ` : ''}
+
+                <div class="section-divider">
+                    <span class="section-title">Sources</span>
+                </div>
+                <div class="sources-list">
+                    ${sources.map(s => `
+                        <a href="${s.url}" target="_blank" rel="noopener" class="source-badge" title="${s.headline}">
+                            <span class="source-dot ${s.source_lean}"></span>
+                            ${s.source_name}
+                        </a>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
+        });
+
+        async function refreshFeed() {
+            const btn = document.getElementById('refreshBtn');
+            btn.disabled = true;
+            btn.textContent = 'SYNCING...';
+
+            try {
+                await fetch('/api/refresh', { method: 'POST' });
+                showToast('Sync initiated');
+            } catch (e) {
+                showToast('Sync failed');
+            }
+
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.textContent = 'SYNC';
+            }, 3000);
+        }
+
+        function showToast(message) {
+            const toast = document.createElement('div');
+            toast.className = 'toast show';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // Pull-to-refresh with visual feedback
+        let touchStart = 0;
+        let pullIndicator = null;
+
+        document.addEventListener('touchstart', e => {
+            if (window.scrollY === 0 && !document.body.classList.contains('modal-open')) {
+                touchStart = e.touches[0].clientY;
+            }
+        }, { passive: true });
+
+        document.addEventListener('touchmove', e => {
+            if (!touchStart) return;
+            const touchY = e.touches[0].clientY;
+            const pull = touchY - touchStart;
+
+            if (pull > 0 && pull < 150 && window.scrollY === 0) {
+                if (!pullIndicator) {
+                    pullIndicator = document.createElement('div');
+                    pullIndicator.className = 'pull-indicator';
+                    pullIndicator.innerHTML = '<span>↓ Pull to refresh</span>';
+                    document.body.appendChild(pullIndicator);
+                }
+                pullIndicator.style.opacity = Math.min(pull / 100, 1);
+                pullIndicator.style.transform = `translateY(${Math.min(pull * 0.5, 60)}px)`;
+
+                if (pull > 80) {
+                    pullIndicator.innerHTML = '<span>↑ Release to refresh</span>';
+                }
+            }
+        }, { passive: true });
+
+        document.addEventListener('touchend', e => {
+            const touchEnd = e.changedTouches[0].clientY;
+            if (touchStart && touchEnd - touchStart > 80 && window.scrollY === 0) {
+                haptic('medium');
+                refreshFeed();
+            }
+
+            // Cleanup pull indicator
+            if (pullIndicator) {
+                pullIndicator.remove();
+                pullIndicator = null;
+            }
+            touchStart = 0;
+        }, { passive: true });
+
+        // Prevent modal close when scrolling inside it
+        document.getElementById('expandedPaper').addEventListener('touchmove', e => {
+            e.stopPropagation();
+        }, { passive: true });
+
+        // iOS: Prevent overscroll on modal
+        document.getElementById('modalOverlay').addEventListener('touchmove', e => {
+            if (e.target === document.getElementById('modalOverlay')) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        // Capacitor ready event
+        document.addEventListener('deviceready', () => {
+            console.log('Capacitor ready');
+            // Hide splash screen if using Capacitor
+            if (window.Capacitor?.Plugins?.SplashScreen) {
+                window.Capacitor.Plugins.SplashScreen.hide();
+            }
+        });
+
+        // Register service worker for PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+        }
+
+        // ===========================================
+        // AUTO-UPDATE CHECK (for mobile)
+        // ===========================================
+        let lastKnownUpdate = null;
+
+        async function checkForUpdates() {
+            try {
+                const response = await fetch('/api/last-updated');
+                const data = await response.json();
+
+                if (lastKnownUpdate && data.last_story_at !== lastKnownUpdate) {
+                    // New content available - show refresh prompt
+                    showUpdateAvailable();
+                }
+                lastKnownUpdate = data.last_story_at;
+            } catch (e) {
+                // Offline or error - ignore
+            }
+        }
+
+        function showUpdateAvailable() {
+            const existing = document.querySelector('.update-banner');
+            if (existing) return;
+
+            const banner = document.createElement('div');
+            banner.className = 'update-banner';
+            banner.innerHTML = `
+                <span>New stories available</span>
+                <button onclick="location.reload()">Refresh</button>
+            `;
+            document.body.appendChild(banner);
+            setTimeout(() => banner.classList.add('show'), 100);
+        }
+
+        // Check for updates every 5 minutes when app is visible
+        setInterval(() => {
+            if (!document.hidden) {
+                checkForUpdates();
+            }
+        }, 5 * 60 * 1000);
+
+        // Also check when app becomes visible (user returns to app)
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                checkForUpdates();
+            }
+        });
+
+        // Initial check
+        checkForUpdates();
+    </script>
+</body>
+</html>
