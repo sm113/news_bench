@@ -86,10 +86,13 @@
 
     <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
         <div class="expanded-paper" id="expandedPaper">
+            <div class="modal-drag-handle"></div>
             <button class="close-btn" onclick="closeModal()">Close</button>
             <div class="expanded-content" id="expandedContent"></div>
         </div>
     </div>
+
+    <div class="swipe-hint" id="swipeHint">← Swipe to dismiss →</div>
 
     <footer class="footer">
         <p>NEWS/BENCH — Multi-source aggregation and synthesis system</p>
@@ -211,8 +214,9 @@
 
                 feed.appendChild(article);
 
-                // Observe for reveal animation
+                // Observe for reveal animation and init swipe
                 revealObserver.observe(article);
+                initCardSwipe(article);
             });
         }
 
@@ -247,7 +251,101 @@
         // Observe all initial stories
         document.querySelectorAll('.newspaper').forEach(el => {
             revealObserver.observe(el);
+            initCardSwipe(el);
         });
+
+        // ===========================================
+        // SWIPE TO DISMISS CARDS
+        // ===========================================
+        const dismissedStories = new Set(JSON.parse(localStorage.getItem('dismissed_stories') || '[]'));
+        let swipeHintShown = false;
+
+        function initCardSwipe(card) {
+            let startX = 0;
+            let startY = 0;
+            let currentX = 0;
+            let isDragging = false;
+            let isHorizontalSwipe = false;
+
+            card.addEventListener('touchstart', (e) => {
+                startX = e.touches[0].clientX;
+                startY = e.touches[0].clientY;
+                currentX = 0;
+                isDragging = true;
+                isHorizontalSwipe = false;
+                card.classList.add('swiping');
+            }, { passive: true });
+
+            card.addEventListener('touchmove', (e) => {
+                if (!isDragging) return;
+
+                const deltaX = e.touches[0].clientX - startX;
+                const deltaY = e.touches[0].clientY - startY;
+
+                // Determine swipe direction on first significant movement
+                if (!isHorizontalSwipe && Math.abs(deltaX) > 10) {
+                    isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
+                }
+
+                if (isHorizontalSwipe) {
+                    e.preventDefault();
+                    currentX = deltaX;
+                    const rotation = deltaX * 0.02;
+                    const opacity = 1 - Math.abs(deltaX) / 400;
+                    card.style.transform = `translateX(${deltaX}px) rotate(${rotation}deg)`;
+                    card.style.opacity = Math.max(opacity, 0.3);
+                }
+            }, { passive: false });
+
+            card.addEventListener('touchend', (e) => {
+                if (!isDragging) return;
+                isDragging = false;
+                card.classList.remove('swiping');
+
+                const threshold = 100;
+
+                if (Math.abs(currentX) > threshold && isHorizontalSwipe) {
+                    // Dismiss the card
+                    haptic('light');
+                    const direction = currentX > 0 ? 'right' : 'left';
+                    card.classList.add(`dismissed-${direction}`);
+
+                    const storyId = card.dataset.storyId;
+                    dismissedStories.add(storyId);
+                    localStorage.setItem('dismissed_stories', JSON.stringify([...dismissedStories]));
+
+                    // Remove card and move to end of feed
+                    setTimeout(() => {
+                        const feed = document.getElementById('storyFeed');
+                        card.classList.remove(`dismissed-${direction}`, 'swiping');
+                        card.style.transform = '';
+                        card.style.opacity = '';
+                        feed.appendChild(card);
+
+                        // Re-reveal with animation
+                        card.classList.remove('revealed');
+                        setTimeout(() => card.classList.add('revealed'), 50);
+                    }, 400);
+                } else {
+                    // Snap back
+                    card.style.transform = '';
+                    card.style.opacity = '';
+                }
+
+                currentX = 0;
+                isHorizontalSwipe = false;
+            }, { passive: true });
+
+            // Show swipe hint on first interaction
+            card.addEventListener('touchstart', () => {
+                if (!swipeHintShown) {
+                    swipeHintShown = true;
+                    const hint = document.getElementById('swipeHint');
+                    hint.classList.add('visible');
+                    setTimeout(() => hint.classList.remove('visible'), 3000);
+                }
+            }, { once: true, passive: true });
+        }
 
         // ===========================================
         // MODAL HANDLING
@@ -423,12 +521,79 @@
             touchStart = 0;
         }, { passive: true });
 
-        // Prevent modal close when scrolling inside it
-        document.getElementById('expandedPaper').addEventListener('touchmove', e => {
-            e.stopPropagation();
+        // ===========================================
+        // MODAL SWIPE DOWN TO DISMISS
+        // ===========================================
+        const modalPaper = document.getElementById('expandedPaper');
+        let modalStartY = 0;
+        let modalCurrentY = 0;
+        let modalIsDragging = false;
+        let modalScrollTop = 0;
+
+        modalPaper.addEventListener('touchstart', (e) => {
+            modalScrollTop = modalPaper.scrollTop;
+            // Only enable swipe if at top of modal content
+            if (modalScrollTop <= 0) {
+                modalStartY = e.touches[0].clientY;
+                modalIsDragging = true;
+                modalCurrentY = 0;
+            }
         }, { passive: true });
 
-        // iOS: Prevent overscroll on modal
+        modalPaper.addEventListener('touchmove', (e) => {
+            if (!modalIsDragging) return;
+
+            const deltaY = e.touches[0].clientY - modalStartY;
+
+            // Only allow downward swipe when at top
+            if (deltaY > 0 && modalScrollTop <= 0) {
+                modalCurrentY = deltaY;
+                modalPaper.classList.add('swiping');
+                const opacity = 1 - deltaY / 500;
+                modalPaper.style.transform = `translateY(${deltaY * 0.6}px)`;
+                modalPaper.style.opacity = Math.max(opacity, 0.5);
+                e.preventDefault();
+            } else {
+                modalIsDragging = false;
+                modalPaper.classList.remove('swiping');
+                modalPaper.style.transform = '';
+                modalPaper.style.opacity = '';
+            }
+        }, { passive: false });
+
+        modalPaper.addEventListener('touchend', () => {
+            if (!modalIsDragging) return;
+            modalIsDragging = false;
+
+            const threshold = 120;
+
+            if (modalCurrentY > threshold) {
+                // Dismiss modal
+                haptic('light');
+                modalPaper.classList.add('dismissing');
+                setTimeout(() => {
+                    document.getElementById('modalOverlay').classList.remove('active');
+                    modalPaper.classList.remove('swiping', 'dismissing');
+                    modalPaper.style.transform = '';
+                    modalPaper.style.opacity = '';
+
+                    // Restore scroll position
+                    document.body.classList.remove('modal-open');
+                    document.body.style.top = '';
+                    window.scrollTo(0, scrollPosition);
+                    currentStory = null;
+                }, 300);
+            } else {
+                // Snap back
+                modalPaper.classList.remove('swiping');
+                modalPaper.style.transform = '';
+                modalPaper.style.opacity = '';
+            }
+
+            modalCurrentY = 0;
+        }, { passive: true });
+
+        // iOS: Prevent overscroll on modal overlay
         document.getElementById('modalOverlay').addEventListener('touchmove', e => {
             if (e.target === document.getElementById('modalOverlay')) {
                 e.preventDefault();
@@ -499,6 +664,44 @@
 
         // Initial check
         checkForUpdates();
+
+        // ===========================================
+        // LOCAL CACHING FOR FAST LOAD
+        // ===========================================
+        const CACHE_KEY = 'newsbench_stories_cache';
+        const CACHE_TIME_KEY = 'newsbench_cache_time';
+
+        // Cache current stories for offline/fast loading
+        function cacheCurrentStories() {
+            try {
+                const stories = [];
+                document.querySelectorAll('[data-story-id]').forEach(el => {
+                    stories.push({
+                        id: el.dataset.storyId,
+                        synthesized_headline: el.querySelector('.newspaper-headline')?.textContent || '',
+                        time_ago: el.querySelector('.newspaper-date')?.textContent?.split('/')[0]?.trim() || '',
+                        source_count: el.querySelectorAll('.source-dot').length
+                    });
+                });
+                if (stories.length > 0) {
+                    localStorage.setItem(CACHE_KEY, JSON.stringify(stories.slice(0, 20)));
+                    localStorage.setItem(CACHE_TIME_KEY, Date.now().toString());
+                }
+            } catch (e) {
+                // Cache failed, ignore
+            }
+        }
+
+        // Cache stories on load and periodically
+        cacheCurrentStories();
+        setInterval(cacheCurrentStories, 5 * 60 * 1000); // Every 5 minutes
+
+        // Also cache when page becomes hidden (user switches apps)
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                cacheCurrentStories();
+            }
+        });
     </script>
 </body>
 </html>
