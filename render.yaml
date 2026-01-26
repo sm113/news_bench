@@ -14,8 +14,8 @@ services:
     runtime: python
     plan: free
 
-    # Build settings - also run initial pipeline to populate data
-    buildCommand: pip install -r requirements.txt && python run.py
+    # Build settings - just install dependencies (pipeline runs via scheduler)
+    buildCommand: pip install -r requirements.txt
 
     # Start command (gunicorn for production)
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120

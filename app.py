@@ -330,7 +330,10 @@ def main():
 
     stats = database.get_stats()
     if stats['total_stories'] == 0:
-        print("⚠️  No stories yet! Run: python run.py")
+        print("⚠️  No stories yet - starting background pipeline...")
+        # Run pipeline in background thread so server starts immediately
+        pipeline_thread = threading.Thread(target=run_pipeline_job, daemon=True)
+        pipeline_thread.start()
 
     app.run(host=host, port=port, debug=debug)
 
