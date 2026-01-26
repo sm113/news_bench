@@ -10,6 +10,7 @@ gunicorn>=21.0.0
 feedparser>=6.0.0
 requests>=2.31.0
 newspaper3k>=0.2.8
+lxml_html_clean
 
 # Machine Learning / Embeddings
 sentence-transformers>=2.2.0
