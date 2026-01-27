@@ -77,10 +77,23 @@
 
         {% else %}
         <div class="empty-state">
-            <h2>No data available</h2>
-            <p>Initialize the news pipeline to begin analysis</p>
-            <code>python run.py</code>
+            <h2>Loading news data</h2>
+            <p>The pipeline is gathering and analyzing stories. This may take a few minutes on first load.</p>
+            <div class="loading-spinner" style="margin: 24px auto;"></div>
+            <p style="margin-top: 24px; opacity: 0.5;">Pull down or tap SYNC to refresh</p>
         </div>
+        <script>
+            // Auto-refresh when data becomes available
+            setInterval(async () => {
+                try {
+                    const res = await fetch('/api/stories?limit=1');
+                    const data = await res.json();
+                    if (data.stories && data.stories.length > 0) {
+                        location.reload();
+                    }
+                } catch (e) {}
+            }, 10000);
+        </script>
         {% endif %}
     </main>
 
