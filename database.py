@@ -33,12 +33,37 @@ else:
 # CONNECTION MANAGEMENT
 # =============================================================================
 
+def _row_to_dict(cursor, row):
+    """Convert a row to a dictionary using cursor description."""
+    if row is None:
+        return None
+    # If it's already a sqlite3.Row, convert directly
+    if hasattr(row, 'keys'):
+        return dict(row)
+    # Otherwise use cursor description (for libsql)
+    columns = [col[0] for col in cursor.description]
+    return dict(zip(columns, row))
+
+def _rows_to_dicts(cursor, rows):
+    """Convert multiple rows to dictionaries."""
+    return [_row_to_dict(cursor, row) for row in rows]
+
+def _fetchone_dict(cursor):
+    """Fetch one row as dictionary."""
+    row = cursor.fetchone()
+    return _row_to_dict(cursor, row) if row else None
+
+def _fetchall_dicts(cursor):
+    """Fetch all rows as dictionaries."""
+    rows = cursor.fetchall()
+    return _rows_to_dicts(cursor, rows)
+
 @contextmanager
 def get_connection():
     """Context manager for database connections."""
     if USE_TURSO:
         conn = libsql.connect(database=TURSO_DATABASE_URL, auth_token=TURSO_AUTH_TOKEN)
-        conn.row_factory = sqlite3.Row
+        # libsql doesn't support row_factory, we'll convert manually
     else:
         conn = sqlite3.connect(DATABASE_PATH)
         conn.row_factory = sqlite3.Row
@@ -134,9 +159,11 @@ def insert_article(
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (source_name, source_lean, headline, lede, url, published_at, datetime.now().isoformat()))
             return cursor.lastrowid
-        except sqlite3.IntegrityError:
-            # Duplicate URL
-            return None
+        except (sqlite3.IntegrityError, Exception) as e:
+            # Duplicate URL or other constraint violation
+            if 'UNIQUE constraint' in str(e) or 'IntegrityError' in str(type(e).__name__):
+                return None
+            raise
 
 
 def get_recent_articles(hours: int = 48) -> List[Dict]:
@@ -150,7 +177,7 @@ def get_recent_articles(hours: int = 48) -> List[Dict]:
             WHERE created_at > ?
             ORDER BY created_at DESC
         """, (cutoff,))
-        return [dict(row) for row in cursor.fetchall()]
+        return _fetchall_dicts(cursor)
 
 
 def get_articles_without_embedding(limit: int = 100) -> List[Dict]:
@@ -164,7 +191,7 @@ def get_articles_without_embedding(limit: int = 100) -> List[Dict]:
             ORDER BY created_at DESC
             LIMIT ?
         """, (limit,))
-        return [dict(row) for row in cursor.fetchall()]
+        return _fetchall_dicts(cursor)
 
 
 def update_article_embedding(article_id: int, embedding: bytes):
@@ -187,7 +214,7 @@ def get_articles_with_embeddings(hours: int = 48) -> List[Dict]:
             WHERE created_at > ? AND embedding IS NOT NULL
             ORDER BY created_at DESC
         """, (cutoff,))
-        return [dict(row) for row in cursor.fetchall()]
+        return _fetchall_dicts(cursor)
 
 
 def get_article_by_id(article_id: int) -> Optional[Dict]:
@@ -198,8 +225,7 @@ def get_article_by_id(article_id: int) -> Optional[Dict]:
             SELECT id, source_name, source_lean, headline, lede, url, published_at, created_at
             FROM articles WHERE id = ?
         """, (article_id,))
-        row = cursor.fetchone()
-        return dict(row) if row else None
+        return _fetchone_dict(cursor)
 
 
 def get_unclustered_article_ids(hours: int = 48) -> List[int]:
@@ -298,8 +324,7 @@ def get_stories(limit: int = 20, offset: int = 0) -> List[Dict]:
         """)
 
         stories = []
-        for row in cursor.fetchall():
-            story = dict(row)
+        for story in _fetchall_dicts(cursor):
             story['relevance_score'] = calculate_relevance_score(
                 story,
                 story.get('article_count', 0),
@@ -336,11 +361,9 @@ def get_story_with_sources(story_id: int) -> Optional[Dict]:
                    center_framing, key_differences, source_count, created_at, updated_at
             FROM stories WHERE id = ?
         """, (story_id,))
-        story_row = cursor.fetchone()
-        if not story_row:
+        story = _fetchone_dict(cursor)
+        if not story:
             return None
-
-        story = dict(story_row)
 
         # Get source articles
         cursor.execute("""
@@ -350,7 +373,7 @@ def get_story_with_sources(story_id: int) -> Optional[Dict]:
             WHERE ss.story_id = ?
             ORDER BY a.source_lean, a.source_name
         """, (story_id,))
-        story['sources'] = [dict(row) for row in cursor.fetchall()]
+        story['sources'] = _fetchall_dicts(cursor)
 
         return story
 
@@ -374,7 +397,7 @@ def get_sources_for_story(story_id: int) -> List[Dict]:
             WHERE ss.story_id = ?
             ORDER BY a.source_lean, a.source_name
         """, (story_id,))
-        return [dict(row) for row in cursor.fetchall()]
+        return _fetchall_dicts(cursor)
 
 
 # =============================================================================
