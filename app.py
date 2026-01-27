@@ -34,6 +34,9 @@ CORS(app)  # Enable CORS for Capacitor mobile app
 # Initialize database at module load (needed for gunicorn)
 database.init_database()
 
+# Lock to prevent multiple workers from running pipeline simultaneously
+_pipeline_lock_file = '/tmp/newsbench_pipeline.lock'
+
 # =============================================================================
 # SCHEDULED TASKS (APScheduler)
 # =============================================================================
@@ -42,7 +45,17 @@ scheduler = None
 
 def run_pipeline_job():
     """Background job to refresh news data."""
-    print(f"\n[SCHEDULER] Starting pipeline job at {datetime.now().isoformat()}")
+    import fcntl
+
+    # Use file lock to prevent multiple workers from running pipeline
+    try:
+        lock_file = open(_pipeline_lock_file, 'w')
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (IOError, OSError):
+        print(f"[PIPELINE] Another pipeline is already running, skipping...")
+        return
+
+    print(f"\n[PIPELINE] Starting pipeline job at {datetime.now().isoformat()}")
     try:
         import scraper
         import clusterer
@@ -52,9 +65,12 @@ def run_pipeline_job():
         clusters = clusterer.run_clustering()
         synthesizer.run_synthesis(clusters)
 
-        print(f"[SCHEDULER] Pipeline completed at {datetime.now().isoformat()}")
+        print(f"[PIPELINE] Pipeline completed at {datetime.now().isoformat()}")
     except Exception as e:
-        print(f"[SCHEDULER] Pipeline error: {e}")
+        print(f"[PIPELINE] Pipeline error: {e}")
+    finally:
+        fcntl.flock(lock_file, fcntl.LOCK_UN)
+        lock_file.close()
 
 def init_scheduler():
     """Initialize APScheduler for periodic updates."""

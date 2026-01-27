@@ -14,9 +14,10 @@ def main():
     cmd = [
         'gunicorn', 'app:app',
         '--bind', f'0.0.0.0:{port}',
-        '--workers', '2',
+        '--workers', '1',      # Single worker to avoid duplicate pipelines/schedulers
         '--threads', '4',
-        '--timeout', '120'
+        '--timeout', '120',
+        '--preload'            # Load app once before forking
     ]
 
     os.execvp('gunicorn', cmd)
