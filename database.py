@@ -98,8 +98,13 @@ def get_connection():
 # DATABASE INITIALIZATION
 # =============================================================================
 
+_initialized = False
+
 def init_database():
     """Initialize the database with required tables."""
+    global _initialized
+    if _initialized:
+        return
     with get_connection() as conn:
         cursor = conn.cursor()
 
@@ -149,6 +154,7 @@ def init_database():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_stories_created ON stories(created_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_story_sources_story ON story_sources(story_id)")
 
+    _initialized = True
     print("[DATABASE] Initialized successfully")
 
 

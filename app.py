@@ -67,9 +67,6 @@ def group_sources_by_lean(sources: list) -> dict:
 @app.route('/')
 def index():
     """Main feed page."""
-    # Initialize database on first request
-    database.init_database()
-
     page = request.args.get('page', 1, type=int)
     offset = (page - 1) * STORIES_PER_PAGE
 
@@ -95,8 +92,6 @@ def index():
 @app.route('/story/<int:story_id>')
 def story_detail(story_id: int):
     """Single story detail view."""
-    database.init_database()
-
     story = database.get_story_with_sources(story_id)
     if not story:
         return "Story not found", 404
@@ -113,8 +108,6 @@ def story_detail(story_id: int):
 @app.route('/api/stories')
 def api_stories():
     """API endpoint for stories."""
-    database.init_database()
-
     page = request.args.get('page', 1, type=int)
     limit = request.args.get('limit', STORIES_PER_PAGE, type=int)
     offset = (page - 1) * limit
@@ -134,8 +127,6 @@ def api_stories():
 @app.route('/api/story/<int:story_id>')
 def api_story(story_id: int):
     """API endpoint for single story."""
-    database.init_database()
-
     story = database.get_story_with_sources(story_id)
     if not story:
         return jsonify({'error': 'Not found'}), 404
@@ -146,8 +137,6 @@ def api_story(story_id: int):
 @app.route('/api/stats')
 def api_stats():
     """API endpoint for database stats."""
-    database.init_database()
-
     stats = database.get_stats()
     stats['last_updated'] = format_timestamp(stats.get('last_story_at'))
     return jsonify(stats)
@@ -157,7 +146,6 @@ def api_stats():
 def api_health():
     """Health check endpoint."""
     try:
-        database.init_database()
         stats = database.get_stats()
         return jsonify({
             'status': 'healthy',
@@ -172,8 +160,6 @@ def api_health():
 def api_refresh():
     """Manually trigger the news pipeline."""
     try:
-        database.init_database()
-
         # Import and run pipeline components
         import scraper
         import clusterer
