@@ -1,19 +1,20 @@
 """
 News Bench - Article Clusterer
 ==============================
-Generates embeddings for articles and clusters related stories using cosine similarity.
+Generates embeddings via Jina AI API and clusters related stories using cosine similarity.
 """
 
 import pickle
+import os
+import time
 import numpy as np
-from typing import List, Dict, Tuple, Set
-from collections import defaultdict
+import requests
+from typing import List, Dict, Optional
 
 # =============================================================================
-# CLUSTERING CONFIG (can override config.py settings here)
+# CLUSTERING CONFIG
 # =============================================================================
 from config import (
-    EMBEDDING_MODEL,
     SIMILARITY_THRESHOLD,
     MIN_SOURCES_FOR_STORY,
     MAX_ARTICLES_FOR_CLUSTERING,
@@ -21,42 +22,63 @@ from config import (
 )
 import database
 
-# Lazy load the sentence transformer model
-_model = None
+# Jina AI API config (free tier: 1M tokens/month)
+JINA_API_KEY = os.environ.get('JINA_API_KEY', '')
+JINA_API_URL = "https://api.jina.ai/v1/embeddings"
+JINA_MODEL = "jina-embeddings-v3"
+EMBEDDING_BATCH_SIZE = 100  # Jina allows up to 2048 per request
 
-def get_model():
-    """Lazy load the sentence transformer model."""
-    global _model
-    if _model is None:
-        print(f"Loading embedding model: {EMBEDDING_MODEL}...")
+# =============================================================================
+# JINA AI EMBEDDING FUNCTIONS
+# =============================================================================
+
+def generate_embeddings_batch(texts: List[str], batch_size: int = EMBEDDING_BATCH_SIZE) -> Optional[np.ndarray]:
+    """Generate embeddings using Jina AI API."""
+    if not JINA_API_KEY:
+        print("ERROR: JINA_API_KEY not set!")
+        print("Get a free API key at: https://jina.ai/embeddings/")
+        return None
+
+    all_embeddings = []
+
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i + batch_size]
+        print(f"  Embedding batch {i//batch_size + 1}/{(len(texts)-1)//batch_size + 1} ({len(batch)} texts)...")
+
         try:
-            from sentence_transformers import SentenceTransformer
-            _model = SentenceTransformer(EMBEDDING_MODEL)
-            print("Model loaded!")
-        except ImportError:
-            print("ERROR: sentence-transformers not installed!")
-            print("Run: pip install sentence-transformers")
-            raise SystemExit(1)
-        except Exception as e:
-            print(f"ERROR loading model: {e}")
-            raise
-    return _model
+            response = requests.post(
+                JINA_API_URL,
+                headers={
+                    "Authorization": f"Bearer {JINA_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": JINA_MODEL,
+                    "task": "text-matching",
+                    "dimensions": 512,
+                    "input": batch
+                },
+                timeout=60
+            )
+            response.raise_for_status()
+            data = response.json()
 
+            # Extract embeddings in order
+            batch_embeddings = [item['embedding'] for item in data['data']]
+            all_embeddings.extend(batch_embeddings)
 
-# =============================================================================
-# EMBEDDING FUNCTIONS
-# =============================================================================
+            # Rate limiting - be nice to the API
+            if i + batch_size < len(texts):
+                time.sleep(0.5)
 
-def generate_embedding(text: str) -> np.ndarray:
-    """Generate embedding for a single text."""
-    model = get_model()
-    return model.encode(text, convert_to_numpy=True)
+        except requests.exceptions.RequestException as e:
+            print(f"  Jina API error: {e}")
+            return None
+        except (KeyError, IndexError) as e:
+            print(f"  Error parsing Jina response: {e}")
+            return None
 
-
-def generate_embeddings_batch(texts: List[str], batch_size: int = 32) -> np.ndarray:
-    """Generate embeddings for multiple texts efficiently."""
-    model = get_model()
-    return model.encode(texts, batch_size=batch_size, convert_to_numpy=True, show_progress_bar=True)
+    return np.array(all_embeddings)
 
 
 def embedding_to_bytes(embedding: np.ndarray) -> bytes:
@@ -73,7 +95,9 @@ def compute_article_text(article: Dict) -> str:
     """Combine headline and lede for embedding."""
     headline = article.get('headline', '')
     lede = article.get('lede', '')
-    return f"{headline}. {lede}" if lede else headline
+    # Limit text length to save API tokens
+    combined = f"{headline}. {lede[:500]}" if lede else headline
+    return combined[:1000]
 
 
 # =============================================================================
@@ -94,8 +118,12 @@ def embed_new_articles():
     # Prepare texts
     texts = [compute_article_text(a) for a in articles]
 
-    # Generate embeddings in batch
+    # Generate embeddings via API
     embeddings = generate_embeddings_batch(texts)
+
+    if embeddings is None:
+        print("Failed to generate embeddings")
+        return 0
 
     # Store embeddings
     for article, embedding in zip(articles, embeddings):
@@ -109,23 +137,12 @@ def embed_new_articles():
 # CLUSTERING FUNCTIONS
 # =============================================================================
 
-def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
-    """Compute cosine similarity between two vectors."""
-    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
-
-
 def build_similarity_matrix(embeddings: List[np.ndarray]) -> np.ndarray:
     """Build a pairwise cosine similarity matrix."""
-    n = len(embeddings)
-    matrix = np.zeros((n, n))
-
     # Normalize embeddings for faster computation
     normalized = np.array([e / np.linalg.norm(e) for e in embeddings])
-
     # Compute similarity matrix
-    matrix = np.dot(normalized, normalized.T)
-
-    return matrix
+    return np.dot(normalized, normalized.T)
 
 
 def cluster_articles(
@@ -167,7 +184,6 @@ def cluster_articles(
 
     # Greedy clustering
     n = len(valid_articles)
-    clustered = set()
     clusters = []
 
     # Sort article pairs by similarity (highest first)
@@ -241,13 +257,13 @@ def cluster_articles(
 def run_clustering() -> List[List[Dict]]:
     """
     Main clustering pipeline:
-    1. Embed new articles
+    1. Embed new articles via Jina AI API
     2. Get recent articles with embeddings
     3. Filter to unclustered articles
     4. Cluster them
     """
     print("\n" + "="*60)
-    print("NEWS BENCH - Article Clustering")
+    print("NEWS BENCH - Article Clustering (Jina AI)")
     print("="*60)
 
     # Step 1: Embed any new articles
@@ -305,7 +321,6 @@ if __name__ == "__main__":
     if args.embed_only:
         embed_new_articles()
     else:
-        # Override config if specified
         clusters = cluster_articles(
             database.get_articles_with_embeddings(hours=CLUSTERING_WINDOW_HOURS),
             similarity_threshold=args.threshold,

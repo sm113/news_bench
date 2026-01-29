@@ -56,10 +56,8 @@ NEWS_SOURCES = [
 # CLUSTERING CONFIG
 # =============================================================================
 # Controls how articles are grouped into stories
-
-# Sentence transformer model for generating embeddings
-# Options: "all-MiniLM-L6-v2" (fast), "all-mpnet-base-v2" (better), "bge-base-en-v1.5"
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+# Embeddings are generated via Jina AI API (free tier: 1M tokens/month)
+# Get your free API key at: https://jina.ai/embeddings/
 
 # Cosine similarity threshold for clustering (0.0 - 1.0)
 # Higher = stricter matching, fewer clusters

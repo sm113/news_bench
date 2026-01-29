@@ -16,8 +16,7 @@ requests>=2.31.0
 newspaper3k>=0.2.8
 lxml_html_clean
 
-# Machine Learning / Embeddings
-sentence-transformers>=2.2.0
+# Embeddings (via Jina AI API - no heavy local models needed)
 numpy>=1.24.0
 
 # Scheduling (for automatic updates)
