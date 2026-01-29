@@ -1,394 +1,861 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>News Bench</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --void: #0c0e12;
-      --void-light: #11141a;
-      --line: rgba(255, 255, 255, 0.08);
-      --text-high: rgba(255, 255, 255, 0.87);
-      --text-low: rgba(255, 255, 255, 0.38);
-      --signal: #00ff88;
-      --font-display: 'Space Grotesk', -apple-system, sans-serif;
-      --font-mono: 'IBM Plex Mono', 'SF Mono', monospace;
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no, maximum-scale=1">
 
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    <!-- PWA & Theme -->
+    <meta name="theme-color" content="#0c0e12">
+    <meta name="color-scheme" content="dark">
 
-    html {
-      -webkit-tap-highlight-color: transparent;
-    }
+    <!-- iOS Specific -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="News/Bench">
+    <meta name="format-detection" content="telephone=no">
 
-    body {
-      font-family: var(--font-display);
-      background: var(--void);
-      color: var(--text-high);
-      min-height: 100vh;
-      min-height: 100dvh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      padding-top: max(20px, env(safe-area-inset-top));
-      padding-bottom: max(20px, env(safe-area-inset-bottom));
-      -webkit-font-smoothing: antialiased;
-      overflow: hidden;
-    }
+    <!-- Icons -->
+    <link rel="apple-touch-icon" href="icons/icon-180.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+    <link rel="apple-touch-icon" sizes="167x167" href="icons/icon-167.png">
 
-    /* Ambient background */
-    body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background:
-        radial-gradient(ellipse 120% 60% at 50% -10%, rgba(30, 40, 60, 0.4), transparent 50%),
-        radial-gradient(ellipse 80% 50% at 0% 100%, rgba(20, 30, 50, 0.3), transparent 40%),
-        linear-gradient(180deg, var(--void) 0%, var(--void-light) 100%);
-      z-index: -2;
-    }
+    <!-- Splash Screens -->
+    <link rel="apple-touch-startup-image" href="splash/splash.png">
 
-    /* Scan lines */
-    body::after {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background: repeating-linear-gradient(
-        0deg,
-        transparent 0px,
-        transparent 3px,
-        rgba(0, 0, 0, 0.15) 3px,
-        rgba(0, 0, 0, 0.15) 4px
-      );
-      pointer-events: none;
-      z-index: 10;
-      opacity: 0.4;
-    }
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
 
-    /* Corner frame */
-    .frame {
-      position: fixed;
-      top: max(16px, env(safe-area-inset-top));
-      left: max(16px, env(safe-area-inset-left));
-      right: max(16px, env(safe-area-inset-right));
-      bottom: max(16px, env(safe-area-inset-bottom));
-      border: 1px solid rgba(255, 255, 255, 0.04);
-      pointer-events: none;
-      z-index: 1;
-    }
-
-    .container {
-      text-align: center;
-      z-index: 5;
-    }
-
-    .logo-text {
-      font-family: var(--font-mono);
-      font-size: 10px;
-      font-weight: 500;
-      color: var(--text-low);
-      letter-spacing: 0.3em;
-      text-transform: uppercase;
-      margin-bottom: 48px;
-    }
-
-    h1 {
-      font-family: var(--font-display);
-      font-size: 42px;
-      font-weight: 300;
-      letter-spacing: -0.02em;
-      margin-bottom: 12px;
-    }
-
-    .tagline {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      color: var(--text-low);
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      margin-bottom: 64px;
-    }
-
-    .loader {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-      margin-bottom: 24px;
-    }
-
-    .loader-bar {
-      width: 120px;
-      height: 1px;
-      background: var(--line);
-      position: relative;
-      overflow: hidden;
-    }
-
-    .loader-bar::after {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -40px;
-      width: 40px;
-      height: 100%;
-      background: var(--signal);
-      animation: slide 1.2s ease-in-out infinite;
-    }
-
-    @keyframes slide {
-      0% { left: -40px; }
-      100% { left: 120px; }
-    }
-
-    .status {
-      font-family: var(--font-mono);
-      font-size: 10px;
-      color: var(--text-low);
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-    }
-
-    .status::before {
-      content: '[ ';
-      color: var(--signal);
-    }
-
-    .status::after {
-      content: ' ]';
-      color: var(--signal);
-    }
-
-    /* Cached headlines preview */
-    .cached-preview {
-      margin-top: 48px;
-      max-width: 320px;
-      text-align: left;
-    }
-
-    .cached-label {
-      font-family: var(--font-mono);
-      font-size: 9px;
-      color: var(--text-low);
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      margin-bottom: 16px;
-      opacity: 0.6;
-    }
-
-    .cached-headline {
-      font-family: var(--font-display);
-      font-size: 14px;
-      font-weight: 400;
-      color: var(--text-high);
-      line-height: 1.4;
-      margin-bottom: 12px;
-      padding-left: 12px;
-      border-left: 1px solid var(--line);
-      opacity: 0;
-      animation: fadeIn 0.5s ease forwards;
-    }
-
-    .cached-headline:nth-child(2) { animation-delay: 0.1s; }
-    .cached-headline:nth-child(3) { animation-delay: 0.2s; }
-    .cached-headline:nth-child(4) { animation-delay: 0.3s; }
-
-    @keyframes fadeIn {
-      to { opacity: 0.7; }
-    }
-
-    /* Status indicator dot */
-    .signal-dot {
-      position: fixed;
-      bottom: max(24px, env(safe-area-inset-bottom));
-      right: max(24px, env(safe-area-inset-right));
-      width: 6px;
-      height: 6px;
-      background: var(--signal);
-      animation: pulse 2s ease-in-out infinite;
-      z-index: 5;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.2; }
-    }
-
-    /* System time display */
-    .sys-time {
-      position: fixed;
-      top: max(24px, env(safe-area-inset-top));
-      right: max(24px, env(safe-area-inset-right));
-      font-family: var(--font-mono);
-      font-size: 9px;
-      color: var(--text-low);
-      letter-spacing: 0.1em;
-      z-index: 5;
-    }
-
-    .cache-age {
-      position: fixed;
-      bottom: max(24px, env(safe-area-inset-bottom));
-      left: max(24px, env(safe-area-inset-left));
-      font-family: var(--font-mono);
-      font-size: 9px;
-      color: var(--text-low);
-      letter-spacing: 0.05em;
-      z-index: 5;
-    }
-  </style>
+    <title>NEWS/BENCH</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="frame"></div>
-  <div class="signal-dot"></div>
-  <div class="sys-time" id="time"></div>
-  <div class="cache-age" id="cacheAge"></div>
+    <div class="bench-background"></div>
+    <div class="scroll-progress" id="scrollProgress"></div>
 
-  <div class="container">
-    <div class="logo-text">News / Bench</div>
-    <h1>Initializing</h1>
-    <p class="tagline">AI-Powered News Synthesis</p>
-    <div class="loader">
-      <div class="loader-bar"></div>
+    <header class="header">
+        <a href="#" class="logo" onclick="event.preventDefault()">
+            <span class="logo-text">News/Bench</span>
+        </a>
+        <div class="header-meta">
+            <span id="storyCount">-- STORIES</span>
+            <span>/</span>
+            <span id="sourceCount">-- SOURCES</span>
+        </div>
+        <div class="header-actions">
+            <button class="icon-btn" onclick="refreshFeed()" id="refreshBtn">SYNC</button>
+        </div>
+    </header>
+
+    <main class="bench" id="mainContent">
+        <!-- Loading state shown on startup -->
+        <div class="empty-state" id="loadingState">
+            <h2 id="loadingTitle">Connecting</h2>
+            <p id="loadingMessage">Reaching server...</p>
+            <div class="loading-spinner" style="margin: 24px auto;"></div>
+            <p id="loadingSubtext" style="margin-top: 24px; opacity: 0.5;"></p>
+        </div>
+    </main>
+
+    <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+        <div class="expanded-paper" id="expandedPaper">
+            <div class="modal-drag-handle"></div>
+            <button class="close-btn" onclick="closeModal()">Close</button>
+            <div class="expanded-content" id="expandedContent"></div>
+        </div>
     </div>
-    <p class="status" id="status">Connecting to server</p>
 
-    <div class="cached-preview" id="cachedPreview" style="display: none;">
-      <div class="cached-label">Previously loaded</div>
-    </div>
-  </div>
+    <div class="swipe-hint" id="swipeHint">&larr; Swipe to dismiss &rarr;</div>
 
-  <script>
-    const SERVER_URL = 'https://news-bench.onrender.com';
-    const HEALTH_ENDPOINT = '/api/health';
-    const STORIES_ENDPOINT = '/api/stories?limit=20';
-    const CACHE_KEY = 'newsbench_stories_cache';
-    const CACHE_TIME_KEY = 'newsbench_cache_time';
+    <footer class="footer" id="appFooter" style="display: none;">
+        <p>NEWS/BENCH &mdash; Multi-source aggregation and synthesis system</p>
+        <p class="footer-disclaimer">AI-generated analysis / Consult primary sources for verification</p>
+    </footer>
 
-    const statusEl = document.getElementById('status');
-    const timeEl = document.getElementById('time');
-    const cacheAgeEl = document.getElementById('cacheAge');
-    const cachedPreviewEl = document.getElementById('cachedPreview');
+    <script>
+        // ===========================================
+        // CONFIG & STATE
+        // ===========================================
+        const SERVER_URL = 'https://news-bench.onrender.com';
+        const CACHE_KEY = 'newsbench_stories_cache';
+        const CACHE_TIME_KEY = 'newsbench_cache_time';
 
-    // Update system time
-    function updateTime() {
-      const now = new Date();
-      timeEl.textContent = now.toLocaleTimeString('en-US', {
-        hour12: false,
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      });
-    }
-    updateTime();
-    setInterval(updateTime, 1000);
+        let currentStory = null;
+        let scrollPosition = 0;
+        let currentPage = 1;
+        let isLoading = false;
+        let hasMoreStories = true;
+        let loadedStoryIds = new Set();
+        let appInitialized = false;
 
-    // Show cached headlines while loading
-    function showCachedPreview() {
-      try {
-        const cached = localStorage.getItem(CACHE_KEY);
-        const cacheTime = localStorage.getItem(CACHE_TIME_KEY);
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
-        if (cached && cacheTime) {
-          const stories = JSON.parse(cached);
-          const age = Date.now() - parseInt(cacheTime);
-          const ageMinutes = Math.floor(age / 60000);
-          const ageHours = Math.floor(ageMinutes / 60);
+        // ===========================================
+        // HAPTIC FEEDBACK
+        // ===========================================
+        function haptic(style = 'light') {
+            if (window.Capacitor?.Plugins?.Haptics) {
+                window.Capacitor.Plugins.Haptics.impact({ style });
+            } else if (navigator.vibrate) {
+                navigator.vibrate(style === 'heavy' ? 20 : 10);
+            }
+        }
 
-          // Show cache age
-          if (ageHours > 0) {
-            cacheAgeEl.textContent = `Cache: ${ageHours}h ago`;
-          } else {
-            cacheAgeEl.textContent = `Cache: ${ageMinutes}m ago`;
-          }
+        // ===========================================
+        // INITIALIZATION
+        // ===========================================
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
 
-          // Show first 3 headlines
-          if (stories.length > 0) {
-            cachedPreviewEl.style.display = 'block';
-            stories.slice(0, 3).forEach(story => {
-              const div = document.createElement('div');
-              div.className = 'cached-headline';
-              div.textContent = story.synthesized_headline;
-              cachedPreviewEl.appendChild(div);
+        async function initializeApp() {
+            const loadingMsg = document.getElementById('loadingMessage');
+            const loadingSub = document.getElementById('loadingSubtext');
+
+            // Show cached stories while connecting
+            showCachedPreview();
+
+            // Cycle status messages during cold-start
+            const messages = [
+                'Reaching server...',
+                'Awaiting response...',
+                'Server may be waking up...',
+                'Loading news data...',
+                'Almost ready...'
+            ];
+            let msgIndex = 0;
+            const msgInterval = setInterval(() => {
+                msgIndex = (msgIndex + 1) % messages.length;
+                if (loadingMsg) loadingMsg.textContent = messages[msgIndex];
+            }, 3000);
+
+            // Poll health endpoint until server is ready
+            let connected = false;
+            while (!connected) {
+                try {
+                    const res = await fetch(SERVER_URL + '/api/health', {
+                        method: 'GET', cache: 'no-store'
+                    });
+                    if (res.ok) connected = true;
+                    else await sleep(2000);
+                } catch (e) {
+                    await sleep(2000);
+                }
+            }
+
+            clearInterval(msgInterval);
+            if (loadingMsg) loadingMsg.textContent = 'Connected — loading stories...';
+
+            // Fetch initial data
+            try {
+                const [storiesRes, statsRes] = await Promise.all([
+                    fetch(SERVER_URL + '/api/stories?page=1&limit=20', { cache: 'no-store' }),
+                    fetch(SERVER_URL + '/api/stats', { cache: 'no-store' })
+                ]);
+
+                const storiesData = await storiesRes.json();
+                const statsData = await statsRes.json();
+
+                // Update header stats
+                document.getElementById('storyCount').textContent =
+                    `${statsData.total_stories} STORIES`;
+                document.getElementById('sourceCount').textContent =
+                    `${statsData.unique_sources} SOURCES`;
+
+                // Transition to feed
+                showFeed(storiesData);
+
+                // Cache for next launch
+                cacheStories(storiesData.stories);
+
+                appInitialized = true;
+            } catch (e) {
+                if (loadingMsg) loadingMsg.textContent = 'Failed to load stories';
+                if (loadingSub) loadingSub.textContent = 'Pull down or tap SYNC to retry';
+            }
+        }
+
+        function showCachedPreview() {
+            try {
+                const cached = localStorage.getItem(CACHE_KEY);
+                const cacheTime = localStorage.getItem(CACHE_TIME_KEY);
+                if (!cached || !cacheTime) return;
+
+                const stories = JSON.parse(cached);
+                if (stories.length === 0) return;
+
+                const age = Date.now() - parseInt(cacheTime);
+                const ageMinutes = Math.floor(age / 60000);
+                const ageHours = Math.floor(ageMinutes / 60);
+
+                const loadingSub = document.getElementById('loadingSubtext');
+                if (loadingSub) {
+                    loadingSub.textContent = ageHours > 0
+                        ? `Showing cached data from ${ageHours}h ago`
+                        : `Showing cached data from ${ageMinutes}m ago`;
+                }
+
+                // Show a few cached headlines while waiting
+                const main = document.getElementById('mainContent');
+                const loadingState = document.getElementById('loadingState');
+
+                const cacheGrid = document.createElement('div');
+                cacheGrid.className = 'newspaper-grid';
+                cacheGrid.id = 'cachedFeed';
+                cacheGrid.style.opacity = '0.5';
+
+                stories.slice(0, 5).forEach(story => {
+                    const article = document.createElement('article');
+                    article.className = 'newspaper revealed';
+                    article.innerHTML = `
+                        <div class="newspaper-date">${story.time_ago || 'Cached'} / ${story.source_count || '?'} sources</div>
+                        <h2 class="newspaper-headline">${story.synthesized_headline}</h2>
+                    `;
+                    cacheGrid.appendChild(article);
+                });
+
+                main.insertBefore(cacheGrid, loadingState);
+            } catch (e) {
+                // Cache read failed, ignore
+            }
+        }
+
+        function showFeed(storiesData) {
+            const main = document.getElementById('mainContent');
+
+            // Remove loading state and cached preview
+            const loadingState = document.getElementById('loadingState');
+            if (loadingState) loadingState.remove();
+            const cachedFeed = document.getElementById('cachedFeed');
+            if (cachedFeed) cachedFeed.remove();
+
+            // Create feed structure
+            main.insertAdjacentHTML('afterbegin', `
+                <div class="newspaper-grid" id="storyFeed"></div>
+                <div class="load-more" id="loadMore">
+                    <div class="loading-spinner"></div>
+                    <span>Loading more stories...</span>
+                </div>
+                <div class="end-of-feed" id="endOfFeed" style="display: none;">
+                    <span>You're all caught up</span>
+                </div>
+            `);
+
+            // Show footer
+            document.getElementById('appFooter').style.display = '';
+
+            // Render initial stories (first 2 get "breaking" class)
+            appendStories(storiesData.stories, true);
+
+            // Check if all stories already loaded
+            if (loadedStoryIds.size >= storiesData.total) {
+                hasMoreStories = false;
+                document.getElementById('loadMore').style.display = 'none';
+                document.getElementById('endOfFeed').style.display = 'flex';
+            }
+        }
+
+        // ===========================================
+        // SCROLL PROGRESS INDICATOR
+        // ===========================================
+        function updateScrollProgress() {
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+            document.getElementById('scrollProgress').style.width = `${progress}%`;
+        }
+
+        let scrollTicking = false;
+        window.addEventListener('scroll', () => {
+            if (!scrollTicking) {
+                requestAnimationFrame(() => {
+                    updateScrollProgress();
+                    checkInfiniteScroll();
+                    scrollTicking = false;
+                });
+                scrollTicking = true;
+            }
+        }, { passive: true });
+
+        // ===========================================
+        // INFINITE SCROLL
+        // ===========================================
+        async function loadMoreStories() {
+            if (isLoading || !hasMoreStories) return;
+
+            isLoading = true;
+            const loadMore = document.getElementById('loadMore');
+            if (loadMore) loadMore.classList.add('active');
+
+            try {
+                currentPage++;
+                const response = await fetch(`${SERVER_URL}/api/stories?page=${currentPage}&limit=10`);
+                const data = await response.json();
+
+                if (data.stories.length === 0) {
+                    hasMoreStories = false;
+                    document.getElementById('loadMore').style.display = 'none';
+                    document.getElementById('endOfFeed').style.display = 'flex';
+                } else {
+                    appendStories(data.stories);
+                    if (loadedStoryIds.size >= data.total) {
+                        hasMoreStories = false;
+                        document.getElementById('loadMore').style.display = 'none';
+                        document.getElementById('endOfFeed').style.display = 'flex';
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to load more stories:', e);
+                currentPage--;
+            }
+
+            isLoading = false;
+            if (loadMore) loadMore.classList.remove('active');
+        }
+
+        function appendStories(stories, isInitialLoad = false) {
+            const feed = document.getElementById('storyFeed');
+            if (!feed) return;
+
+            stories.forEach(story => {
+                if (loadedStoryIds.has(String(story.id))) return;
+                loadedStoryIds.add(String(story.id));
+
+                const article = document.createElement('article');
+                const isBreaking = isInitialLoad && loadedStoryIds.size <= 2;
+                article.className = `newspaper${isBreaking ? ' breaking' : ''}`;
+                article.setAttribute('data-story-id', story.id);
+                article.setAttribute('data-relevance', story.relevance_score || 0);
+                article.onclick = () => openStory(story.id);
+
+                const sourceDots = (story.sources || []).slice(0, 8).map(s =>
+                    `<span class="source-dot ${s.source_lean}" title="${s.source_name}"></span>`
+                ).join('');
+
+                article.innerHTML = `
+                    <div class="newspaper-meta">
+                        <span class="relevance-score" title="Relevance score">${Math.round(story.relevance_score || 0)}</span>
+                        <div class="newspaper-sources">${sourceDots}</div>
+                    </div>
+                    <div class="newspaper-date">${story.time_ago} / ${story.source_count} sources</div>
+                    <h2 class="newspaper-headline">${story.synthesized_headline}</h2>
+                `;
+
+                feed.appendChild(article);
+                revealObserver.observe(article);
+                initCardSwipe(article);
             });
-          }
         }
-      } catch (e) {
-        // Cache read failed, ignore
-      }
-    }
 
-    // Status messages
-    const messages = [
-      'Connecting to server',
-      'Awaiting response',
-      'Server spinning up',
-      'Loading news data',
-      'Almost ready'
-    ];
-    let msgIndex = 0;
+        function checkInfiniteScroll() {
+            const loadMore = document.getElementById('loadMore');
+            if (!loadMore || !hasMoreStories) return;
 
-    setInterval(() => {
-      msgIndex = (msgIndex + 1) % messages.length;
-      statusEl.textContent = messages[msgIndex];
-    }, 3000);
+            const rect = loadMore.getBoundingClientRect();
+            const threshold = window.innerHeight * 1.5;
 
-    // Cache stories for offline/fast loading
-    async function cacheStories() {
-      try {
-        const response = await fetch(SERVER_URL + STORIES_ENDPOINT, {
-          cache: 'no-store'
+            if (rect.top < threshold) {
+                loadMoreStories();
+            }
+        }
+
+        // ===========================================
+        // REVEAL ANIMATIONS (Intersection Observer)
+        // ===========================================
+        const revealObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('revealed');
+                }
+            });
+        }, {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
         });
-        if (response.ok) {
-          const data = await response.json();
-          localStorage.setItem(CACHE_KEY, JSON.stringify(data.stories));
-          localStorage.setItem(CACHE_TIME_KEY, Date.now().toString());
-        }
-      } catch (e) {
-        // Cache failed, ignore
-      }
-    }
 
-    async function checkServer() {
-      try {
-        const response = await fetch(SERVER_URL + HEALTH_ENDPOINT, {
-          method: 'GET',
-          cache: 'no-store'
+        // ===========================================
+        // SWIPE TO DISMISS CARDS
+        // ===========================================
+        const dismissedStories = new Set(JSON.parse(localStorage.getItem('dismissed_stories') || '[]'));
+        let swipeHintShown = false;
+
+        function initCardSwipe(card) {
+            let startX = 0;
+            let startY = 0;
+            let currentX = 0;
+            let isDragging = false;
+            let isHorizontalSwipe = false;
+
+            card.addEventListener('touchstart', (e) => {
+                startX = e.touches[0].clientX;
+                startY = e.touches[0].clientY;
+                currentX = 0;
+                isDragging = true;
+                isHorizontalSwipe = false;
+                card.classList.add('swiping');
+            }, { passive: true });
+
+            card.addEventListener('touchmove', (e) => {
+                if (!isDragging) return;
+
+                const deltaX = e.touches[0].clientX - startX;
+                const deltaY = e.touches[0].clientY - startY;
+
+                if (!isHorizontalSwipe && Math.abs(deltaX) > 10) {
+                    isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
+                }
+
+                if (isHorizontalSwipe) {
+                    e.preventDefault();
+                    currentX = deltaX;
+                    const rotation = deltaX * 0.02;
+                    const opacity = 1 - Math.abs(deltaX) / 400;
+                    card.style.transform = `translateX(${deltaX}px) rotate(${rotation}deg)`;
+                    card.style.opacity = Math.max(opacity, 0.3);
+                }
+            }, { passive: false });
+
+            card.addEventListener('touchend', () => {
+                if (!isDragging) return;
+                isDragging = false;
+                card.classList.remove('swiping');
+
+                const threshold = 100;
+
+                if (Math.abs(currentX) > threshold && isHorizontalSwipe) {
+                    haptic('light');
+                    const direction = currentX > 0 ? 'right' : 'left';
+                    card.classList.add(`dismissed-${direction}`);
+
+                    const storyId = card.dataset.storyId;
+                    dismissedStories.add(storyId);
+                    localStorage.setItem('dismissed_stories', JSON.stringify([...dismissedStories]));
+
+                    setTimeout(() => {
+                        const feed = document.getElementById('storyFeed');
+                        card.classList.remove(`dismissed-${direction}`, 'swiping');
+                        card.style.transform = '';
+                        card.style.opacity = '';
+                        feed.appendChild(card);
+
+                        card.classList.remove('revealed');
+                        setTimeout(() => card.classList.add('revealed'), 50);
+                    }, 400);
+                } else {
+                    card.style.transform = '';
+                    card.style.opacity = '';
+                }
+
+                currentX = 0;
+                isHorizontalSwipe = false;
+            }, { passive: true });
+
+            card.addEventListener('touchstart', () => {
+                if (!swipeHintShown) {
+                    swipeHintShown = true;
+                    const hint = document.getElementById('swipeHint');
+                    hint.classList.add('visible');
+                    setTimeout(() => hint.classList.remove('visible'), 3000);
+                }
+            }, { once: true, passive: true });
+        }
+
+        // ===========================================
+        // MODAL HANDLING
+        // ===========================================
+        async function openStory(storyId) {
+            haptic('light');
+            try {
+                const response = await fetch(`${SERVER_URL}/api/story/${storyId}`);
+                const story = await response.json();
+                currentStory = story;
+                renderExpandedStory(story);
+
+                scrollPosition = window.scrollY;
+                document.body.classList.add('modal-open');
+                document.body.style.top = `-${scrollPosition}px`;
+
+                document.getElementById('modalOverlay').classList.add('active');
+            } catch (e) {
+                console.error('Failed to load story:', e);
+            }
+        }
+
+        function closeModal(event) {
+            if (!event || event.target === document.getElementById('modalOverlay') || event.target.classList.contains('close-btn')) {
+                haptic('light');
+                document.getElementById('modalOverlay').classList.remove('active');
+
+                document.body.classList.remove('modal-open');
+                document.body.style.top = '';
+                window.scrollTo(0, scrollPosition);
+
+                currentStory = null;
+            }
+        }
+
+        function renderExpandedStory(story) {
+            const sources = story.sources || [];
+            const timestamp = new Date().toISOString().split('T')[0];
+
+            document.getElementById('expandedContent').innerHTML = `
+                <div class="expanded-masthead">News/Bench</div>
+                <div class="expanded-date">${timestamp} / ${sources.length} sources analyzed</div>
+
+                <h1 class="expanded-headline">${story.synthesized_headline}</h1>
+
+                <div class="story-body">${story.consensus || 'No summary available.'}</div>
+
+                ${(story.left_framing || story.center_framing || story.right_framing) ? `
+                <div class="section-divider">
+                    <span class="section-title">How They Frame It</span>
+                </div>
+                <div class="framing-grid">
+                    <div class="framing-column left">
+                        <div class="framing-label">
+                            <span class="framing-dot"></span>
+                            Left
+                        </div>
+                        <p class="framing-text">${story.left_framing || 'No left-leaning coverage.'}</p>
+                    </div>
+                    <div class="framing-column center">
+                        <div class="framing-label">
+                            <span class="framing-dot"></span>
+                            Center
+                        </div>
+                        <p class="framing-text">${story.center_framing || 'No center coverage.'}</p>
+                    </div>
+                    <div class="framing-column right">
+                        <div class="framing-label">
+                            <span class="framing-dot"></span>
+                            Right
+                        </div>
+                        <p class="framing-text">${story.right_framing || 'No right-leaning coverage.'}</p>
+                    </div>
+                </div>
+                ` : ''}
+
+                ${story.key_differences ? `
+                <div class="section-divider">
+                    <span class="section-title">Blind Spots</span>
+                </div>
+                <p class="differences-content">${story.key_differences}</p>
+                ` : ''}
+
+                <div class="section-divider">
+                    <span class="section-title">Sources</span>
+                </div>
+                <div class="sources-list">
+                    ${sources.map(s => `
+                        <a href="${s.url}" target="_blank" rel="noopener" class="source-badge" title="${s.headline}">
+                            <span class="source-dot ${s.source_lean}"></span>
+                            ${s.source_name}
+                        </a>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
         });
-        if (response.ok) {
-          statusEl.textContent = 'Connected';
 
-          // Cache stories in background before redirect
-          cacheStories();
+        // ===========================================
+        // REFRESH / SYNC
+        // ===========================================
+        async function refreshFeed() {
+            if (!appInitialized) {
+                // Re-attempt initialization if app hasn't loaded yet
+                initializeApp();
+                return;
+            }
 
-          setTimeout(() => {
-            window.location.href = SERVER_URL;
-          }, 500);
-        } else {
-          setTimeout(checkServer, 2000);
+            const btn = document.getElementById('refreshBtn');
+            btn.disabled = true;
+            btn.textContent = 'SYNCING...';
+
+            try {
+                await fetch(SERVER_URL + '/api/refresh', { method: 'POST' });
+                showToast('Sync initiated');
+
+                // Re-fetch stories and stats
+                const [storiesRes, statsRes] = await Promise.all([
+                    fetch(SERVER_URL + '/api/stories?page=1&limit=20', { cache: 'no-store' }),
+                    fetch(SERVER_URL + '/api/stats', { cache: 'no-store' })
+                ]);
+
+                const storiesData = await storiesRes.json();
+                const statsData = await statsRes.json();
+
+                // Update header
+                document.getElementById('storyCount').textContent =
+                    `${statsData.total_stories} STORIES`;
+                document.getElementById('sourceCount').textContent =
+                    `${statsData.unique_sources} SOURCES`;
+
+                // Reset and re-render feed
+                const feed = document.getElementById('storyFeed');
+                if (feed) feed.innerHTML = '';
+                loadedStoryIds.clear();
+                currentPage = 1;
+                hasMoreStories = true;
+
+                const loadMore = document.getElementById('loadMore');
+                const endOfFeed = document.getElementById('endOfFeed');
+                if (loadMore) loadMore.style.display = '';
+                if (endOfFeed) endOfFeed.style.display = 'none';
+
+                appendStories(storiesData.stories, true);
+                cacheStories(storiesData.stories);
+
+                if (loadedStoryIds.size >= storiesData.total) {
+                    hasMoreStories = false;
+                    if (loadMore) loadMore.style.display = 'none';
+                    if (endOfFeed) endOfFeed.style.display = 'flex';
+                }
+            } catch (e) {
+                showToast('Sync failed');
+            }
+
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.textContent = 'SYNC';
+            }, 3000);
         }
-      } catch (e) {
-        setTimeout(checkServer, 2000);
-      }
-    }
 
-    // Show cached content while loading
-    showCachedPreview();
+        function showToast(message) {
+            const toast = document.createElement('div');
+            toast.className = 'toast show';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
 
-    // Start checking server
-    checkServer();
+        // ===========================================
+        // PULL-TO-REFRESH
+        // ===========================================
+        let touchStart = 0;
+        let pullIndicator = null;
 
-    // Background refresh - ping server periodically to keep warm
-    // This runs when app is open but also sets up for next launch
-    setInterval(() => {
-      fetch(SERVER_URL + HEALTH_ENDPOINT, { method: 'GET', cache: 'no-store' }).catch(() => {});
-    }, 10 * 60 * 1000); // Every 10 minutes
-  </script>
+        document.addEventListener('touchstart', e => {
+            if (window.scrollY === 0 && !document.body.classList.contains('modal-open')) {
+                touchStart = e.touches[0].clientY;
+            }
+        }, { passive: true });
+
+        document.addEventListener('touchmove', e => {
+            if (!touchStart) return;
+            const touchY = e.touches[0].clientY;
+            const pull = touchY - touchStart;
+
+            if (pull > 0 && pull < 150 && window.scrollY === 0) {
+                if (!pullIndicator) {
+                    pullIndicator = document.createElement('div');
+                    pullIndicator.className = 'pull-indicator';
+                    pullIndicator.innerHTML = '<span>&darr; Pull to refresh</span>';
+                    document.body.appendChild(pullIndicator);
+                }
+                pullIndicator.style.opacity = Math.min(pull / 100, 1);
+                pullIndicator.style.transform = `translateY(${Math.min(pull * 0.5, 60)}px)`;
+
+                if (pull > 80) {
+                    pullIndicator.innerHTML = '<span>&uarr; Release to refresh</span>';
+                }
+            }
+        }, { passive: true });
+
+        document.addEventListener('touchend', e => {
+            const touchEnd = e.changedTouches[0].clientY;
+            if (touchStart && touchEnd - touchStart > 80 && window.scrollY === 0) {
+                haptic('medium');
+                refreshFeed();
+            }
+
+            if (pullIndicator) {
+                pullIndicator.remove();
+                pullIndicator = null;
+            }
+            touchStart = 0;
+        }, { passive: true });
+
+        // ===========================================
+        // MODAL SWIPE DOWN TO DISMISS
+        // ===========================================
+        const modalPaper = document.getElementById('expandedPaper');
+        let modalStartY = 0;
+        let modalCurrentY = 0;
+        let modalIsDragging = false;
+        let modalScrollTop = 0;
+
+        modalPaper.addEventListener('touchstart', (e) => {
+            modalScrollTop = modalPaper.scrollTop;
+            if (modalScrollTop <= 0) {
+                modalStartY = e.touches[0].clientY;
+                modalIsDragging = true;
+                modalCurrentY = 0;
+            }
+        }, { passive: true });
+
+        modalPaper.addEventListener('touchmove', (e) => {
+            if (!modalIsDragging) return;
+
+            const deltaY = e.touches[0].clientY - modalStartY;
+
+            if (deltaY > 0 && modalScrollTop <= 0) {
+                modalCurrentY = deltaY;
+                modalPaper.classList.add('swiping');
+                const opacity = 1 - deltaY / 500;
+                modalPaper.style.transform = `translateY(${deltaY * 0.6}px)`;
+                modalPaper.style.opacity = Math.max(opacity, 0.5);
+                e.preventDefault();
+            } else {
+                modalIsDragging = false;
+                modalPaper.classList.remove('swiping');
+                modalPaper.style.transform = '';
+                modalPaper.style.opacity = '';
+            }
+        }, { passive: false });
+
+        modalPaper.addEventListener('touchend', () => {
+            if (!modalIsDragging) return;
+            modalIsDragging = false;
+
+            const threshold = 120;
+
+            if (modalCurrentY > threshold) {
+                haptic('light');
+                modalPaper.classList.add('dismissing');
+                setTimeout(() => {
+                    document.getElementById('modalOverlay').classList.remove('active');
+                    modalPaper.classList.remove('swiping', 'dismissing');
+                    modalPaper.style.transform = '';
+                    modalPaper.style.opacity = '';
+
+                    document.body.classList.remove('modal-open');
+                    document.body.style.top = '';
+                    window.scrollTo(0, scrollPosition);
+                    currentStory = null;
+                }, 300);
+            } else {
+                modalPaper.classList.remove('swiping');
+                modalPaper.style.transform = '';
+                modalPaper.style.opacity = '';
+            }
+
+            modalCurrentY = 0;
+        }, { passive: true });
+
+        // iOS: Prevent overscroll on modal overlay
+        document.getElementById('modalOverlay').addEventListener('touchmove', e => {
+            if (e.target === document.getElementById('modalOverlay')) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        // ===========================================
+        // CAPACITOR READY
+        // ===========================================
+        document.addEventListener('deviceready', () => {
+            console.log('Capacitor ready');
+            if (window.Capacitor?.Plugins?.SplashScreen) {
+                window.Capacitor.Plugins.SplashScreen.hide();
+            }
+        });
+
+        // ===========================================
+        // SERVICE WORKER
+        // ===========================================
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(() => {});
+        }
+
+        // ===========================================
+        // AUTO-UPDATE CHECK
+        // ===========================================
+        let lastKnownUpdate = null;
+
+        async function checkForUpdates() {
+            try {
+                const response = await fetch(SERVER_URL + '/api/last-updated');
+                const data = await response.json();
+
+                if (lastKnownUpdate && data.last_story_at !== lastKnownUpdate) {
+                    showUpdateAvailable();
+                }
+                lastKnownUpdate = data.last_story_at;
+            } catch (e) {
+                // Offline or error - ignore
+            }
+        }
+
+        function showUpdateAvailable() {
+            const existing = document.querySelector('.update-banner');
+            if (existing) return;
+
+            const banner = document.createElement('div');
+            banner.className = 'update-banner';
+            banner.innerHTML = `
+                <span>New stories available</span>
+                <button onclick="refreshFeed(); this.parentElement.remove();">Refresh</button>
+            `;
+            document.body.appendChild(banner);
+            setTimeout(() => banner.classList.add('show'), 100);
+        }
+
+        // Check for updates every 5 minutes when app is visible
+        setInterval(() => {
+            if (!document.hidden && appInitialized) {
+                checkForUpdates();
+            }
+        }, 5 * 60 * 1000);
+
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && appInitialized) {
+                checkForUpdates();
+            }
+        });
+
+        // ===========================================
+        // LOCAL CACHING
+        // ===========================================
+        function cacheStories(stories) {
+            try {
+                if (stories && stories.length > 0) {
+                    localStorage.setItem(CACHE_KEY, JSON.stringify(stories.slice(0, 20)));
+                    localStorage.setItem(CACHE_TIME_KEY, Date.now().toString());
+                }
+            } catch (e) {
+                // Cache write failed, ignore
+            }
+        }
+
+        // Periodically re-cache (in case new stories were loaded via infinite scroll)
+        setInterval(() => {
+            if (!appInitialized) return;
+            const feed = document.getElementById('storyFeed');
+            if (!feed) return;
+            // Re-fetch current page 1 for cache
+            fetch(SERVER_URL + '/api/stories?page=1&limit=20', { cache: 'no-store' })
+                .then(r => r.json())
+                .then(data => cacheStories(data.stories))
+                .catch(() => {});
+        }, 5 * 60 * 1000);
+
+        // Also cache when app goes to background
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && appInitialized) {
+                fetch(SERVER_URL + '/api/stories?page=1&limit=20', { cache: 'no-store' })
+                    .then(r => r.json())
+                    .then(data => cacheStories(data.stories))
+                    .catch(() => {});
+            }
+        });
+
+        // ===========================================
+        // START THE APP
+        // ===========================================
+        initializeApp();
+    </script>
 </body>
 </html>

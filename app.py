@@ -8,8 +8,9 @@ from flask import Flask, render_template, jsonify, request, make_response
 from flask_cors import CORS
 from datetime import datetime
 import os
+import atexit
 
-from config import FLASK_HOST, FLASK_PORT, FLASK_DEBUG, STORIES_PER_PAGE
+from config import FLASK_HOST, FLASK_PORT, FLASK_DEBUG, STORIES_PER_PAGE, REFRESH_INTERVAL_HOURS
 import database
 
 # =============================================================================
@@ -18,6 +19,56 @@ import database
 
 app = Flask(__name__)
 CORS(app)
+
+# =============================================================================
+# BACKGROUND SCHEDULER (for periodic pipeline runs)
+# =============================================================================
+
+scheduler = None
+
+def run_pipeline_job():
+    """Background job to run the news pipeline."""
+    print("[SCHEDULER] Starting scheduled pipeline run...")
+    try:
+        import scraper
+        import clusterer
+        import synthesizer
+
+        scraper.scrape_all_sources()
+        clusters = clusterer.run_clustering()
+        if clusters:
+            synthesizer.run_synthesis(clusters)
+
+        stats = database.get_stats()
+        print(f"[SCHEDULER] Pipeline complete: {stats['total_articles']} articles, {stats['total_stories']} stories")
+    except Exception as e:
+        print(f"[SCHEDULER] Pipeline error: {e}")
+
+def init_scheduler():
+    """Initialize the background scheduler if enabled."""
+    global scheduler
+    if os.environ.get('ENABLE_SCHEDULER', '').lower() != 'true':
+        print("[SCHEDULER] Disabled (set ENABLE_SCHEDULER=true to enable)")
+        return
+
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(
+            run_pipeline_job,
+            'interval',
+            hours=REFRESH_INTERVAL_HOURS,
+            id='news_pipeline',
+            replace_existing=True
+        )
+        scheduler.start()
+        print(f"[SCHEDULER] Started - will run every {REFRESH_INTERVAL_HOURS} hours")
+        atexit.register(lambda: scheduler.shutdown())
+    except Exception as e:
+        print(f"[SCHEDULER] Failed to start: {e}")
+
+# Initialize scheduler when app starts
+init_scheduler()
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -140,6 +191,13 @@ def api_stats():
     stats = database.get_stats()
     stats['last_updated'] = format_timestamp(stats.get('last_story_at'))
     return jsonify(stats)
+
+
+@app.route('/api/last-updated')
+def api_last_updated():
+    """API endpoint for last update timestamp."""
+    stats = database.get_stats()
+    return jsonify({'last_story_at': stats.get('last_story_at')})
 
 
 @app.route('/api/health')

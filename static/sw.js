@@ -1,10 +1,11 @@
 // News/Bench Service Worker
-const CACHE_NAME = 'newsbench-v1';
+const CACHE_NAME = 'newsbench-v2';
+const API_HOST = 'news-bench.onrender.com';
 const STATIC_ASSETS = [
-  '/',
-  '/static/style.css',
-  '/static/manifest.json',
-  '/static/offline.html'
+  'index.html',
+  'style.css',
+  'manifest.json',
+  'offline.html'
 ];
 
 // Install: cache static assets
@@ -32,8 +33,8 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // API requests: network only (always want fresh data)
-  if (url.pathname.startsWith('/api/')) {
+  // API requests (cross-origin to Render): network only
+  if (url.hostname === API_HOST || url.pathname.includes('/api/')) {
     event.respondWith(
       fetch(event.request)
         .catch(() => new Response(JSON.stringify({ error: 'Offline' }), {
@@ -43,8 +44,8 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Static assets: cache-first
-  if (url.pathname.startsWith('/static/')) {
+  // Local static assets: cache-first
+  if (url.origin === self.location.origin) {
     event.respondWith(
       caches.match(event.request)
         .then(cached => cached || fetch(event.request).then(response => {
@@ -52,20 +53,14 @@ self.addEventListener('fetch', event => {
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
           return response;
         }))
+        .catch(() => caches.match('offline.html'))
     );
     return;
   }
 
-  // HTML pages: network-first with cache fallback, then offline page
+  // Everything else: network with fallback
   event.respondWith(
     fetch(event.request)
-      .then(response => {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        return response;
-      })
-      .catch(() => caches.match(event.request)
-        .then(cached => cached || caches.match('/static/offline.html'))
-      )
+      .catch(() => caches.match(event.request))
   );
 });
