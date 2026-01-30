@@ -65,14 +65,31 @@ NEWS_SOURCES = [
 SIMILARITY_THRESHOLD = 0.45  # Lower threshold to catch differently-worded coverage
 
 # Minimum number of different sources required for a story to be included
-# Lower = more stories but potentially less significant ones
-MIN_SOURCES_FOR_STORY = 1
+# Higher = only stories covered by multiple outlets (more significant)
+MIN_SOURCES_FOR_STORY = 2
 
 # Maximum articles to consider for clustering (performance)
 MAX_ARTICLES_FOR_CLUSTERING = 2000  # Process more articles per run
 
 # How many hours back to look for articles to cluster
 CLUSTERING_WINDOW_HOURS = 96  # 4 days instead of 2
+
+# =============================================================================
+# RELEVANCE SCORING CONFIG
+# =============================================================================
+# Controls how stories are ranked (higher score = more prominent)
+
+# Weight for number of sources (more sources = more important)
+RELEVANCE_WEIGHT_SOURCES = 15  # Points per source
+
+# Weight for political diversity (covered across spectrum = bigger story)
+RELEVANCE_WEIGHT_DIVERSITY = 20  # Points per unique lean (left/center/right/international)
+
+# Weight for recency (hours old reduces score)
+RELEVANCE_WEIGHT_RECENCY = 2  # Points lost per hour old
+
+# Base score for all stories
+RELEVANCE_BASE_SCORE = 50
 
 # =============================================================================
 # SYNTHESIS CONFIG

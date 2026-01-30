@@ -10,7 +10,10 @@ from datetime import datetime
 import os
 import atexit
 
-from config import FLASK_HOST, FLASK_PORT, FLASK_DEBUG, STORIES_PER_PAGE, REFRESH_INTERVAL_HOURS
+from config import (
+    FLASK_HOST, FLASK_PORT, FLASK_DEBUG, STORIES_PER_PAGE, REFRESH_INTERVAL_HOURS,
+    RELEVANCE_WEIGHT_SOURCES, RELEVANCE_WEIGHT_DIVERSITY, RELEVANCE_WEIGHT_RECENCY, RELEVANCE_BASE_SCORE
+)
 import database
 
 # =============================================================================
@@ -124,6 +127,34 @@ def group_sources_by_lean(sources: list) -> dict:
     return grouped
 
 
+def calculate_relevance_score(story: dict, sources: list) -> int:
+    """
+    Calculate relevance score for a story based on:
+    - Number of sources covering it
+    - Diversity of political leans
+    - Recency
+    """
+    score = RELEVANCE_BASE_SCORE
+
+    # Source count bonus (more sources = bigger story)
+    source_count = len(sources)
+    score += source_count * RELEVANCE_WEIGHT_SOURCES
+
+    # Lean diversity bonus (coverage across spectrum = significant story)
+    unique_leans = set(s.get('source_lean', 'center') for s in sources)
+    score += len(unique_leans) * RELEVANCE_WEIGHT_DIVERSITY
+
+    # Recency penalty (older stories rank lower)
+    try:
+        created = datetime.fromisoformat(story.get('created_at', ''))
+        hours_old = (datetime.now() - created).total_seconds() / 3600
+        score -= int(hours_old * RELEVANCE_WEIGHT_RECENCY)
+    except (ValueError, TypeError):
+        pass
+
+    return max(0, min(100, score))  # Clamp between 0-100
+
+
 # =============================================================================
 # ROUTES
 # =============================================================================
@@ -142,6 +173,10 @@ def index():
         story['sources'] = database.get_sources_for_story(story['id'])
         story['sources_grouped'] = group_sources_by_lean(story['sources'])
         story['time_ago'] = format_timestamp(story['created_at'])
+        story['relevance_score'] = calculate_relevance_score(story, story['sources'])
+
+    # Sort by relevance score (highest first)
+    stories.sort(key=lambda s: s['relevance_score'], reverse=True)
 
     stats = database.get_stats()
     stats['last_updated'] = format_timestamp(stats.get('last_story_at'))
@@ -176,10 +211,18 @@ def api_stories():
     limit = request.args.get('limit', STORIES_PER_PAGE, type=int)
     offset = (page - 1) * limit
 
-    stories = database.get_stories(limit=limit, offset=offset)
-    for story in stories:
+    # Get more stories than requested so we can sort by relevance, then paginate
+    all_stories = database.get_stories(limit=1000, offset=0)
+    for story in all_stories:
         story['sources'] = database.get_sources_for_story(story['id'])
         story['time_ago'] = format_timestamp(story['created_at'])
+        story['relevance_score'] = calculate_relevance_score(story, story['sources'])
+
+    # Sort by relevance score (highest first)
+    all_stories.sort(key=lambda s: s['relevance_score'], reverse=True)
+
+    # Paginate after sorting
+    stories = all_stories[offset:offset + limit]
 
     return jsonify({
         'stories': stories,
